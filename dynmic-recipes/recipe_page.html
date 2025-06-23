@@ -169,7 +169,7 @@
             <i class="fas fa-align-left"></i>
           </button>
           <div class="logo">Foodkuy</div>
-          
+
         </div>
       </nav>
       <!-- .Header  -->
@@ -331,20 +331,15 @@
         div.innerHTML = html;
         let text = div.innerText;
 
-        // Ensure section headers always start on a new line
+        // Clean up the text and ensure proper section markers
         text = text
-          .replace(/(Dan \d+:)/g, '\n$1')
-          .replace(/(🧪 Sastojci:)/g, '\n$1')
-          .replace(/(🧑‍🍳 Priprema:)/g, '\n$1')
-          .replace(/(✅ Savjet za korištenje:)/g, '\n$1')
-          .replace(/(Opis:)/g, '\n$1');
-
-        // Clean up the text
-        const cleanText = text.replace(/\r\n/g, '\n').replace(/\n{2,}/g, '\n').trim();
+          .replace(/\r\n/g, '\n')
+          .replace(/\n{3,}/g, '\n\n')  // Replace multiple newlines with double newlines
+          .trim();
 
         // First, split the text into sections
         const sections = {};
-        
+
         // Helper function to extract content between markers
         function extractBetween(text, startMarker, endMarker) {
           const startIndex = text.indexOf(startMarker);
@@ -357,33 +352,104 @@
           return text.substring(contentStart, endIndex).trim();
         }
 
-        // Extract each section
-        const titleMatch = cleanText.match(/🥬 Recept:\s*(.*?)(?=\n|$)/);
+        // Helper function to split concatenated ingredients
+        function splitIngredients(ingredientsText) {
+          if (!ingredientsText) return ingredientsText;
+
+          // If already has bullet points, return as is
+          if (ingredientsText.includes('•')) {
+            return ingredientsText;
+          }
+
+          // Split concatenated ingredients by looking for patterns
+          let splitText = ingredientsText
+            // Add line breaks before numbers that start new ingredients
+            .replace(/(\d+[\/\d]*\s*[a-zšđčćž])/gi, '\n$1')
+            .replace(/(Operi|Stavi|Miksaj|Dodaj|Pij|Po potrebi|dok)/gi, '\n$1')
+            // Add line breaks before "Sok od"
+            .replace(/(Sok\s+od\s+)/gi, '\n$1')
+            // Add line breaks before measurements in parentheses
+            .replace(/(\d+[–-]\d+\s*ml)/gi, '\n$1')
+            // Clean up multiple spaces and normalize
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          // Split by newlines and clean up
+          const lines = splitText.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0);
+
+          // If we have multiple lines, join them with bullet points
+          if (lines.length > 1) {
+            return lines.map(line => `• ${line}`).join('\n');
+          }
+
+          return ingredientsText;
+        }
+
+        // Helper function to split concatenated preparation steps
+        function splitPreparation(preparationText) {
+          if (!preparationText) return preparationText;
+          
+          let textToProcess = preparationText;
+
+          // If text contains bullets, use them as separators.
+          if (textToProcess.includes('•')) {
+            textToProcess = textToProcess.replace(/\s*•\s*/g, '\n');
+          } else {
+            // Otherwise, split by sentences. This regex adds a newline after
+            // a sentence-ending punctuation mark if it's followed by a letter.
+            textToProcess = textToProcess.replace(/([.!?])\s*(?=[A-ZŠĐČĆŽa-zšđčćž])/g, '$1\n');
+          }
+
+          return textToProcess
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0)
+            .join('\n');
+        }
+
+        // Extract each section with improved markers
+        const titleMatch = text.match(/🥬 Recept:\s*(.*?)(?=\n|$)/);
         sections.title = titleMatch ? titleMatch[1].trim() : '';
-        sections.description = extractBetween(cleanText, 'Opis:', '🧪 Sastojci:');
-        sections.ingredients = extractBetween(cleanText, '🧪 Sastojci:', '🧑‍🍳 Priprema:');
-        sections.preparation = extractBetween(cleanText, '🧑‍🍳 Priprema:', '✅ Savjet');
-        const tipsStart = cleanText.indexOf('✅ Savjet za korištenje:');
+        
+        // Extract description (between "Opis:" and "🧪 Sastojci:")
+        sections.description = extractBetween(text, 'Opis:', '🧪 Sastojci:');
+        
+        // Extract ingredients (between "🧪 Sastojci:" and "🧑‍🍳 Priprema:")
+        let ingredients = extractBetween(text, '🧪 Sastojci:', '🧑‍🍳 Priprema:');
+        sections.ingredients = splitIngredients(ingredients);
+        
+        // Extract preparation (between "🧑‍🍳 Priprema:" and "✅ Savjet")
+        let preparation = extractBetween(text, '🧑‍🍳 Priprema:', '✅ Savjet');
+        sections.preparation = splitPreparation(preparation);
+        
+        // Extract tips (after "✅ Savjet za korištenje:")
+        const tipsStart = text.indexOf('✅ Savjet za korištenje:');
         if (tipsStart !== -1) {
-          sections.tips = cleanText.substring(tipsStart + '✅ Savjet za korištenje:'.length).trim();
+          sections.tips = text.substring(tipsStart + '✅ Savjet za korištenje:'.length).trim();
         } else {
           sections.tips = '';
         }
-        // Clean up each section
+
+        // Clean up each section by removing any remaining section markers
         Object.keys(sections).forEach(key => {
           if (sections[key]) {
             sections[key] = sections[key]
-              .replace(/🧪 Sastojci:.*$/, '')
-              .replace(/🧑‍🍳 Priprema:.*$/, '')
-              .replace(/✅ Savjet za korištenje:.*$/, '')
-              .replace(/Opis:.*$/, '')
+              .replace(/🧪 Sastojci:.*$/g, '')
+              .replace(/🧑‍🍳 Priprema:.*$/g, '')
+              .replace(/✅ Savjet za korištenje:.*$/g, '')
+              .replace(/Opis:.*$/g, '')
+              .replace(/🥬 Recept:.*$/g, '')
               .trim();
           }
         });
+
         // If no sections are found, show the whole text as description
-        if (!sections.description && !cleanText.includes('🧪 Sastojci:') && !cleanText.includes('🧑‍🍳 Priprema:')) {
-          sections.description = cleanText;
+        if (!sections.description && !text.includes('🧪 Sastojci:') && !text.includes('🧑‍🍳 Priprema:')) {
+          sections.description = text;
         }
+
         return sections;
       }
 
@@ -391,56 +457,12 @@
       function formatList(text) {
         if (!text) return '';
 
-        // First, normalize bullet points and ensure proper line breaks
-        let normalizedText = text
-          // Replace tab+bullet combinations with newline+bullet
-          .replace(/\t•/g, '\n•')
-          // Ensure there's a newline before bullets
-          .replace(/([^\n])•/g, '$1\n•')
-          // Add line breaks between ingredients that are run together
-          .replace(/(\d+[^•\n\d]+)(?=\d+)/g, '$1\n')  // For numbers: "100ml vode2 žlice" -> "100ml vode\n2 žlice"
-          .replace(/([a-zšđčćž])\s*(?=\d+\s*[a-zšđčćž])/gi, '$1\n')  // For word-number transitions
-          // Add line breaks for preparation steps (sentences ending with period)
-          .replace(/\.([A-ZŠĐČĆŽ])/g, '.\n$1')  // Split on period followed by capital letter
-          // Replace multiple spaces with single space
-          .replace(/\s+/g, ' ')
-          // Normalize line endings
-          .replace(/\r\n/g, '\n')
-          .trim();
-
-        // If there are no bullet points, try to split by numbers or periods
-        if (!normalizedText.includes('•')) {
-          normalizedText = normalizedText
-            .split('\n')
-            .map(line => line.trim())
-            .map(line => {
-              // If line starts with a number or is a complete sentence
-              if (/^\d/.test(line) || /^[A-ZŠĐČĆŽ].*\.$/.test(line)) {
-                return '• ' + line;
-              }
-              return line;
-            })
-            .join('\n');
-        }
-
-        // Split by newlines and process each line
-        return normalizedText.split('\n')
+        // The input text is expected to have items separated by newlines.
+        return text
+          .split('\n')
           .map(line => line.trim())
           .filter(line => line.length > 0)
-          .map(line => {
-            // Handle bullet points
-            if (line.includes('•')) {
-              const [_, content] = line.split('•');
-              return `<li>${content.trim()}</li>`;
-            }
-            // Handle numbered items
-            const numberedMatch = line.match(/^\d+\.\s*(.+)/);
-            if (numberedMatch) {
-              return `<li>${numberedMatch[1].trim()}</li>`;
-            }
-            // Handle any remaining items
-            return `<li>${line.trim()}</li>`;
-          })
+          .map(line => `<li>${line}</li>`)
           .join('\n');
       }
 
@@ -510,7 +532,7 @@
 
       // Initialize favorite functionality
       const favoriteBtn = document.getElementById('favoriteBtn');
-      
+
       // Check if recipe is already favorited
       function isRecipeFavorited() {
         const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
@@ -562,7 +584,7 @@
         toast.className = 'toast-message';
         toast.textContent = message;
         document.body.appendChild(toast);
-        
+
         setTimeout(() => {
           toast.classList.add('show');
           setTimeout(() => {
@@ -637,10 +659,27 @@
     .preparation-list li {
       margin-bottom: 10px;
       line-height: 1.5;
+      padding: 5px 0;
     }
 
     .preparation-list {
       list-style-type: decimal;
+    }
+
+    .ingredients-list {
+      list-style-type: disc;
+    }
+
+    /* Ensure proper spacing for list items */
+    .ingredients-list li:not(:last-child),
+    .preparation-list li:not(:last-child) {
+      margin-bottom: 12px;
+    }
+
+    /* Handle long ingredient names */
+    .ingredients-list li {
+      word-wrap: break-word;
+      hyphens: auto;
     }
 
     .recp-tips {
@@ -684,9 +723,17 @@
     }
 
     @keyframes heartBeat {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.2); }
-      100% { transform: scale(1); }
+      0% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.2);
+      }
+
+      100% {
+        transform: scale(1);
+      }
     }
 
     .toast-message {
