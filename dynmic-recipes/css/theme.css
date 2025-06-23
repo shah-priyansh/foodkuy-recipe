@@ -1222,9 +1222,7 @@ a[data-toggle="collapse"] {
   margin-bottom: 10px 0px;
 }
 
-.wrap-food-recipe .recipe-description ul.list.list-number {
-  list-style: binary;
-}
+
 
 .wrap-food-recipe .recipe-description .recp-heading {
   font-weight: 600;
