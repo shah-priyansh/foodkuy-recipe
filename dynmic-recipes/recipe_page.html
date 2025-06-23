@@ -356,35 +356,22 @@
         function splitIngredients(ingredientsText) {
           if (!ingredientsText) return ingredientsText;
 
-          // If already has bullet points, return as is
-          if (ingredientsText.includes('•')) {
-            return ingredientsText;
+          let textToProcess = ingredientsText;
+
+          // If text contains bullets, use them as separators.
+          if (textToProcess.includes('•')) {
+            textToProcess = textToProcess.replace(/\s*•\s*/g, '\n');
+          } else {
+            // Otherwise, split by looking for a lowercase letter followed by an
+            // uppercase letter or a number, which usually indicates a new ingredient.
+            textToProcess = textToProcess.replace(/([a-zšđčćž\)])([A-ZŠĐČĆŽ\d])/g, '$1\n$2');
           }
 
-          // Split concatenated ingredients by looking for patterns
-          let splitText = ingredientsText
-            // Add line breaks before numbers that start new ingredients
-            .replace(/(\d+[\/\d]*\s*[a-zšđčćž])/gi, '\n$1')
-            .replace(/(Operi|Stavi|Miksaj|Dodaj|Pij|Po potrebi|dok)/gi, '\n$1')
-            // Add line breaks before "Sok od"
-            .replace(/(Sok\s+od\s+)/gi, '\n$1')
-            // Add line breaks before measurements in parentheses
-            .replace(/(\d+[–-]\d+\s*ml)/gi, '\n$1')
-            // Clean up multiple spaces and normalize
-            .replace(/\s+/g, ' ')
-            .trim();
-
-          // Split by newlines and clean up
-          const lines = splitText.split('\n')
+          return textToProcess
+            .split('\n')
             .map(line => line.trim())
-            .filter(line => line.length > 0);
-
-          // If we have multiple lines, join them with bullet points
-          if (lines.length > 1) {
-            return lines.map(line => `• ${line}`).join('\n');
-          }
-
-          return ingredientsText;
+            .filter(line => line.length > 0)
+            .join('\n');
         }
 
         // Helper function to split concatenated preparation steps
