@@ -324,7 +324,7 @@
         }
       }
 
-      // Function to parse a guide with daily or numbered sections, assuming input text has proper newlines.
+      // Universal guide parser for various formats (daily, numbered, weekly plans).
       function parseGuideContent(text) {
         let html = '<div class="recipe-full-content guide-content">';
         const lines = text.split('\n').map(line => line.trim()).filter(line => line);
@@ -337,46 +337,18 @@
         let sections = [];
         let currentSection = null;
 
+        const days = ['Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota', 'Nedjelja'];
+        const sectionHeadingRegex = new RegExp(`^(Dan \\d+:|\\d+\\.|${days.join('|')})`);
+        
         for (const line of lines) {
-            // A line is a section heading if it starts with "Dan X:" or a number followed by a period.
-            if (/^(Dan \d+:|\d+\.)/.test(line)) {
+            if (sectionHeadingRegex.test(line)) {
                 if (currentSection) sections.push(currentSection);
-                
-                // A section heading might contain the first list item on the same line.
-                // We split the line at the first list item marker (a space followed by - or •).
-                const itemMarkerIndex = line.search(/\s[-•]/);
-
-                let heading;
-                let itemsText = '';
-
-                if (itemMarkerIndex > 0) {
-                    heading = line.substring(0, itemMarkerIndex).trim();
-                    itemsText = line.substring(itemMarkerIndex).trim();
-                } else {
-                    heading = line;
-                }
-
-                currentSection = { heading: heading, list: [] };
-                
-                if (itemsText) {
-                    // Split the rest of the line into list items.
-                    const items = itemsText.split(/\s*[-•]\s*/).filter(item => item.trim());
-                    items.forEach(item => {
-                        if (item) currentSection.list.push(item);
-                    });
-                }
-
-            } else if (line.startsWith('-') || line.startsWith('•')) {
-                if (currentSection) {
-                    // This line contains only list items.
-                    const items = line.split(/\s*[-•]\s*/).filter(item => item.trim());
-                    items.forEach(item => {
-                        if (item) currentSection.list.push(item);
-                    });
-                }
+                currentSection = { heading: line, content: [] };
             } else {
-                // If we haven't started any sections yet, it's part of the main description.
-                if (!currentSection) {
+                if (currentSection) {
+                    currentSection.content.push(line);
+                } else {
+                    // Anything before the first section heading is the description.
                     description += (description ? ' ' : '') + line;
                 }
             }
@@ -386,15 +358,36 @@
         if (description) {
             html += `<p>${description}</p>`;
         }
+        
+        const mealTypes = ['Doručak:', 'Ručak:', 'Večera:', 'Međuobrok:','Ritual:','Navika:'];
 
         sections.forEach(section => {
             html += `<h6>${section.heading}</h6>`;
-            if (section.list.length > 0) {
-                html += '<ul class="list ingredients-list">';
-                section.list.forEach(item => {
-                    html += `<li>${item}</li>`;
+            const contentText = section.content.join(' ');
+            
+            // Check if this section contains meal plan items or bulleted items.
+            if (mealTypes.some(type => contentText.includes(type))) {
+                const mealRegex = new RegExp(`(?=(${mealTypes.join('|')}))`, 'g');
+                const meals = contentText.split(mealRegex).filter(m => m.trim());
+                meals.forEach(meal => {
+                    const firstColonIndex = meal.indexOf(':');
+                    if (firstColonIndex > -1) {
+                        const mealType = meal.substring(0, firstColonIndex + 1);
+                        const mealDesc = meal.substring(firstColonIndex + 1);
+                        html += `<p><strong>${mealType}</strong>${mealDesc.trim()}</p>`;
+                    }
                 });
-                html += '</ul>';
+            } else if (contentText.includes('-') || contentText.includes('•')) {
+                 const listItems = contentText.split(/\s*[-•]\s*/).filter(item => item.trim());
+                 if (listItems.length > 0) {
+                     html += '<ul class="list ingredients-list">';
+                     listItems.forEach(item => {
+                         html += `<li>${item}</li>`;
+                     });
+                     html += '</ul>';
+                 }
+            } else {
+                 html += `<p>${contentText}</p>`;
             }
         });
 
@@ -417,8 +410,10 @@
         }
         text = text.trim();
 
-        // If it's a guide, use the guide parser. Detects "Day X:" or "1." style guides.
-        if (/(Dan \d+:)|(^\d+\.)/m.test(text)) {
+        // If it's a guide, use the guide parser. Detects all guide formats.
+        const days = ['Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota', 'Nedjelja'];
+        const guideDetectionRegex = new RegExp(`(Dan \\d+:)|(^\\d+\\.)|(${days.join('|')})`, 'm');
+        if (guideDetectionRegex.test(text)) {
           return { isGuide: true, guideContent: parseGuideContent(text) };
         }
 
