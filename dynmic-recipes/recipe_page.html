@@ -392,12 +392,88 @@
         return html;
       }
 
+      // A more robust function to parse standard recipe content.
+      function parseStandardRecipe(text) {
+        const sections = {
+          title: '',
+          description: '',
+          ingredients: '',
+          preparation: '',
+          tips: ''
+        };
+
+        // Define keywords with optional emojis for splitting.
+        const keywords = {
+          ingredients: /\s*(?:🧪\s*)?Sastojci:/,
+          preparation: /\s*(?:🧑‍🍳\s*)?Priprema:/,
+          tips: /\s*(?:✅\s*)?Savjet(?: za korištenje)?:/
+        };
+
+        // Split the text block by the main keywords.
+        // The regex uses a lookahead `(?=...)` to split the text while keeping the delimiter.
+        const parts = text.split(/(?=\s*(?:🧪\s*|🧑‍🍳\s*|✅\s*)?(?:Sastojci:|Priprema:|Savjet))/);
+
+        // The first part is always the title and description.
+        const header = (parts.shift() || '').trim();
+        const headerLines = header.split('\n').map(l => l.trim()).filter(Boolean);
+        
+        let title = '';
+        const descLines = [];
+        let titleFound = false;
+        
+        headerLines.forEach(part => {
+            if (!titleFound && (/Recept:/.test(part) || part.includes(':'))) {
+                title = part.replace(/.*?Recept:\s*/, '').replace(/.*?Kategorija:\s*/, '').trim();
+                titleFound = true;
+            } else {
+                descLines.push(part);
+            }
+        });
+        
+        if (!title && descLines.length > 0) {
+            title = descLines.shift();
+        }
+
+        sections.title = title;
+        sections.description = descLines.join(' ');
+        
+        // Process each subsequent part (ingredients, preparation, tips)
+        parts.forEach(part => {
+            const trimmedPart = part.trim();
+            if (keywords.ingredients.test(trimmedPart)) {
+                sections.ingredients = trimmedPart.replace(keywords.ingredients, '').trim();
+            } else if (keywords.preparation.test(trimmedPart)) {
+                sections.preparation = trimmedPart.replace(keywords.preparation, '').trim();
+            } else if (keywords.tips.test(trimmedPart)) {
+                sections.tips = trimmedPart.replace(keywords.tips, '').trim();
+            }
+        });
+
+        // Split the content of each section into a list.
+        const splitContentToList = (content) => {
+            if (!content) return '';
+            return content
+                .replace(/\s*[•-]\s*/g, '\n')
+                .replace(/([a-zšđčćž\)])([A-ZŠĐČĆŽ\d])/g, '$1\n$2')
+                .split('\n')
+                .map(l => l.trim())
+                .filter(Boolean)
+                .join('\n');
+        };
+
+        sections.ingredients = splitContentToList(sections.ingredients);
+        sections.preparation = splitContentToList(sections.preparation);
+        sections.tips = splitContentToList(sections.tips);
+
+        return sections;
+      }
+
       // Function to parse recipe content from HTML
       function parseRecipeContent(html) {
         const div = document.createElement('div');
         div.innerHTML = html;
         
-        // Rebuild text from child nodes to preserve paragraph breaks as newlines.
+        // CRITICAL: Rebuild text from child nodes to preserve paragraph breaks as newlines.
         let text = '';
         for (const node of div.childNodes) {
             if (node.textContent && node.textContent.trim()) {
@@ -406,57 +482,24 @@
         }
         text = text.trim();
 
-        // A document is a standard recipe if it contains these keywords. This check is crucial.
-        const standardRecipeKeywords = ['Sastojci:', 'Priprema:', 'Savjet:'];
-        const isStandardRecipe = standardRecipeKeywords.some(keyword => text.includes(keyword));
+        const guideKeywords = ['Dan ', 'Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota', 'Nedjelja'];
+        const recipeKeywords = ['Sastojci:', 'Priprema:', 'Savjet:'];
 
-        // Now, check for guide patterns. A guide must not be a standard recipe.
-        const days = ['Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota', 'Nedjelja'];
-        // Use a more specific regex for numbered lists (digit, dot, space) to avoid false positives.
-        const guideDetectionRegex = new RegExp(`(Dan \\d+:)|(^\\d+\\.\\s)|(${days.join('|')})`, 'm');
+        const isRecipe = recipeKeywords.some(kw => text.includes(kw));
+        const isGuide = guideKeywords.some(kw => text.includes(kw));
         
-        if (!isStandardRecipe && guideDetectionRegex.test(text)) {
+        // A guide cannot be a recipe. Recipe keywords take precedence.
+        if (isGuide && !isRecipe) {
           return { isGuide: true, guideContent: parseGuideContent(text) };
         }
 
-        // --- Standard Recipe Parsing Logic ---
-        const sections = {};
-        
-        // Helper functions
-        const extractBetween = (text, startMarker, endMarker) => {
-          const startIndex = text.indexOf(startMarker);
-          if (startIndex === -1) return '';
-          const contentStart = startIndex + startMarker.length;
-          const endIndex = text.indexOf(endMarker, contentStart);
-          return (endIndex === -1) ? text.substring(contentStart).trim() : text.substring(contentStart, endIndex).trim();
-        };
-
-        const splitList = (listText) => {
-          if (!listText) return '';
-          return listText.replace(/\s*•\s*/g, '\n').split('\n').map(l => l.trim()).filter(Boolean).join('\n');
-        };
-
-        // Improved title and description extraction for standard recipes.
-        const keywordIndices = standardRecipeKeywords.map(k => text.indexOf(k)).filter(i => i !== -1);
-        let titleAndDescText = text;
-        let bodyText = '';
-
-        if (keywordIndices.length > 0) {
-            const firstKeywordIndex = Math.min(...keywordIndices);
-            titleAndDescText = text.substring(0, firstKeywordIndex).trim();
-            bodyText = text.substring(firstKeywordIndex);
+        // If it's a recipe, use the new standard parser.
+        if (isRecipe) {
+            return parseStandardRecipe(text);
         }
 
-        const titleParts = titleAndDescText.split('\n').map(p => p.trim()).filter(Boolean);
-        sections.title = titleParts.shift() || '';
-        sections.description = titleParts.join(' ');
-
-        sections.ingredients = splitList(extractBetween(bodyText, 'Sastojci:', 'Priprema:'));
-        sections.preparation = splitList(extractBetween(bodyText, 'Priprema:', 'Savjet:'));
-        const tipsText = extractBetween(bodyText, 'Savjet:', null); // Get text from Savjet to end.
-        sections.tips = splitList(tipsText);
-
-        return sections;
+        // Fallback for content that is neither (or if logic fails)
+        return { isGuide: true, guideContent: `<p>${text.replace(/\n/g, '<br>')}</p>` };
       }
 
       // Function to format list items

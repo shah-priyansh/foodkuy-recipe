@@ -362,27 +362,35 @@
             favorites.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
 
             // Generate HTML for each favorite recipe
-            const html = favorites.map(recipe => `
-              <div class="recipe-card">
+            const html = favorites.map(recipe => {
+              const recipeUrl = `recipe_page.html?title=${encodeURIComponent(recipe.title)}&category=${encodeURIComponent(recipe.category)}&image=${encodeURIComponent(recipe.image)}&file=${encodeURIComponent(recipe.docFile)}`;
+              return `
+              <div class="recipe-card" style="cursor: pointer;" onclick="window.location.href='${recipeUrl}'">
                 <div class="recipe-image">
                   <img src="${recipe.image || 'images/placeholder.jpg'}" alt="${recipe.title}">
-                  <button class="remove-favorite" onclick="removeFavorite('${recipe.title}')">
+                  <button class="remove-favorite" onclick="removeFavoriteHandler(event, '${recipe.title}')">
                     <i class="fas fa-times"></i>
                   </button>
                 </div>
                 <div class="recipe-content">
                   <h3 class="recipe-title">
-                    <a href="recipe_page.html?title=${encodeURIComponent(recipe.title)}&category=${encodeURIComponent(recipe.category)}&image=${encodeURIComponent(recipe.image)}&file=${encodeURIComponent(recipe.docFile)}">
+                    <a href="${recipeUrl}">
                       ${recipe.title}
                     </a>
                   </h3>
                   ${recipe.category ? `<span class="recipe-category">${recipe.category}</span>` : ''}
                 </div>
               </div>
-            `).join('');
+            `}).join('');
 
             favoritesList.innerHTML = html;
           }
+
+          // A new handler to prevent redirection when removing a favorite
+          window.removeFavoriteHandler = function(event, title) {
+            event.stopPropagation();
+            window.removeFavorite(title);
+          };
 
           // Remove a recipe from favorites
           window.removeFavorite = function(title) {
