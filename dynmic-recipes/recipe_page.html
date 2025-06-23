@@ -454,7 +454,7 @@
             if (!content) return '';
             return content
                 .replace(/\s*[•-]\s*/g, '\n')
-                .replace(/([a-zšđčćž\)])([A-ZŠĐČĆŽ\d])/g, '$1\n$2')
+                .replace(/([a-zšđčćž\)]|\.)([A-ZŠĐČĆŽ\d])/g, '$1\n$2')
                 .split('\n')
                 .map(l => l.trim())
                 .filter(Boolean)
