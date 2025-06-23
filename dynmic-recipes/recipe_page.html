@@ -329,9 +329,8 @@
         let html = '<div class="recipe-full-content guide-content">';
         const lines = text.split('\n').map(line => line.trim()).filter(line => line);
         
-        // First line is the title.
         const title = lines.shift() || '';
-        html += `<h3>Opis</h3>`;
+        html += `<h3>${title}</h3>`;
 
         let description = '';
         let sections = [];
@@ -348,7 +347,6 @@
                 if (currentSection) {
                     currentSection.content.push(line);
                 } else {
-                    // Anything before the first section heading is the description.
                     description += (description ? ' ' : '') + line;
                 }
             }
@@ -359,13 +357,12 @@
             html += `<p>${description}</p>`;
         }
         
-        const mealTypes = ['Doručak:', 'Ručak:', 'Večera:', 'Međuobrok:','Ritual:','Navika:'];
+        const mealTypes = ['Doručak:', 'Ručak:', 'Večera:', 'Međuobrok:', 'Ritual:', 'Navika:'];
 
         sections.forEach(section => {
             html += `<h6>${section.heading}</h6>`;
             const contentText = section.content.join(' ');
             
-            // Check if this section contains meal plan items or bulleted items.
             if (mealTypes.some(type => contentText.includes(type))) {
                 const mealRegex = new RegExp(`(?=(${mealTypes.join('|')}))`, 'g');
                 const meals = contentText.split(mealRegex).filter(m => m.trim());
@@ -401,7 +398,6 @@
         div.innerHTML = html;
         
         // Rebuild text from child nodes to preserve paragraph breaks as newlines.
-        // This is critical for reliable parsing of all document types.
         let text = '';
         for (const node of div.childNodes) {
             if (node.textContent && node.textContent.trim()) {
@@ -410,117 +406,55 @@
         }
         text = text.trim();
 
-        // If it's a guide, use the guide parser. Detects all guide formats.
+        // A document is a standard recipe if it contains these keywords. This check is crucial.
+        const standardRecipeKeywords = ['Sastojci:', 'Priprema:', 'Savjet:'];
+        const isStandardRecipe = standardRecipeKeywords.some(keyword => text.includes(keyword));
+
+        // Now, check for guide patterns. A guide must not be a standard recipe.
         const days = ['Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota', 'Nedjelja'];
-        const guideDetectionRegex = new RegExp(`(Dan \\d+:)|(^\\d+\\.)|(${days.join('|')})`, 'm');
-        if (guideDetectionRegex.test(text)) {
+        // Use a more specific regex for numbered lists (digit, dot, space) to avoid false positives.
+        const guideDetectionRegex = new RegExp(`(Dan \\d+:)|(^\\d+\\.\\s)|(${days.join('|')})`, 'm');
+        
+        if (!isStandardRecipe && guideDetectionRegex.test(text)) {
           return { isGuide: true, guideContent: parseGuideContent(text) };
         }
 
-        // Clean up the text and ensure proper section markers for standard recipes
-        text = text
-          .replace(/\r\n/g, '\n')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim();
-        
+        // --- Standard Recipe Parsing Logic ---
         const sections = {};
         
-        // Helper function to extract content between markers
-        function extractBetween(text, startMarker, endMarker) {
+        // Helper functions
+        const extractBetween = (text, startMarker, endMarker) => {
           const startIndex = text.indexOf(startMarker);
           if (startIndex === -1) return '';
           const contentStart = startIndex + startMarker.length;
           const endIndex = text.indexOf(endMarker, contentStart);
-          if (endIndex === -1) {
-            return text.substring(contentStart).trim();
-          }
-          return text.substring(contentStart, endIndex).trim();
+          return (endIndex === -1) ? text.substring(contentStart).trim() : text.substring(contentStart, endIndex).trim();
+        };
+
+        const splitList = (listText) => {
+          if (!listText) return '';
+          return listText.replace(/\s*•\s*/g, '\n').split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+        };
+
+        // Improved title and description extraction for standard recipes.
+        const keywordIndices = standardRecipeKeywords.map(k => text.indexOf(k)).filter(i => i !== -1);
+        let titleAndDescText = text;
+        let bodyText = '';
+
+        if (keywordIndices.length > 0) {
+            const firstKeywordIndex = Math.min(...keywordIndices);
+            titleAndDescText = text.substring(0, firstKeywordIndex).trim();
+            bodyText = text.substring(firstKeywordIndex);
         }
 
-        // Helper function to split concatenated ingredients
-        function splitIngredients(ingredientsText) {
-          if (!ingredientsText) return ingredientsText;
+        const titleParts = titleAndDescText.split('\n').map(p => p.trim()).filter(Boolean);
+        sections.title = titleParts.shift() || '';
+        sections.description = titleParts.join(' ');
 
-          let textToProcess = ingredientsText;
-
-          // If text contains bullets, use them as separators.
-          if (textToProcess.includes('•')) {
-            textToProcess = textToProcess.replace(/\s*•\s*/g, '\n');
-          } else {
-            // Otherwise, split by looking for a lowercase letter followed by an
-            // uppercase letter or a number, which usually indicates a new ingredient.
-            textToProcess = textToProcess.replace(/([a-zšđčćž\)])([A-ZŠĐČĆŽ\d])/g, '$1\n$2');
-          }
-
-          return textToProcess
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0)
-            .join('\n');
-        }
-
-        // Helper function to split concatenated preparation steps
-        function splitPreparation(preparationText) {
-          if (!preparationText) return preparationText;
-          
-          let textToProcess = preparationText;
-
-          // If text contains bullets, use them as separators.
-          if (textToProcess.includes('•')) {
-            textToProcess = textToProcess.replace(/\s*•\s*/g, '\n');
-          } else {
-            // Otherwise, split by sentences. This regex adds a newline after
-            // a sentence-ending punctuation mark if it's followed by a letter.
-            textToProcess = textToProcess.replace(/([.!?])\s*(?=[A-ZŠĐČĆŽa-zšđčćž])/g, '$1\n');
-          }
-
-          return textToProcess
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0)
-            .join('\n');
-        }
-
-        // Extract each section with improved markers
-        const titleMatch = text.match(/🥬 Recept:\s*(.*?)(?=\n|$)/);
-        sections.title = titleMatch ? titleMatch[1].trim() : '';
-        
-        // Extract description (between "Opis:" and "🧪 Sastojci:")
-        sections.description = extractBetween(text, 'Opis:', '🧪 Sastojci:');
-        
-        // Extract ingredients (between "🧪 Sastojci:" and "🧑‍🍳 Priprema:")
-        let ingredients = extractBetween(text, '🧪 Sastojci:', '🧑‍🍳 Priprema:');
-        sections.ingredients = splitIngredients(ingredients);
-        
-        // Extract preparation (between "🧑‍🍳 Priprema:" and "✅ Savjet")
-        let preparation = extractBetween(text, '🧑‍🍳 Priprema:', '✅ Savjet');
-        sections.preparation = splitPreparation(preparation);
-        
-        // Extract tips (after "✅ Savjet za korištenje:")
-        const tipsStart = text.indexOf('✅ Savjet za korištenje:');
-        if (tipsStart !== -1) {
-          sections.tips = text.substring(tipsStart + '✅ Savjet za korištenje:'.length).trim();
-        } else {
-          sections.tips = '';
-        }
-
-        // Clean up each section by removing any remaining section markers
-        Object.keys(sections).forEach(key => {
-          if (sections[key]) {
-            sections[key] = sections[key]
-              .replace(/🧪 Sastojci:.*$/g, '')
-              .replace(/🧑‍🍳 Priprema:.*$/g, '')
-              .replace(/✅ Savjet za korištenje:.*$/g, '')
-              .replace(/Opis:.*$/g, '')
-              .replace(/🥬 Recept:.*$/g, '')
-              .trim();
-          }
-        });
-
-        // If no sections are found, show the whole text as description
-        if (!sections.description && !text.includes('🧪 Sastojci:') && !text.includes('🧑‍🍳 Priprema:')) {
-          sections.description = text;
-        }
+        sections.ingredients = splitList(extractBetween(bodyText, 'Sastojci:', 'Priprema:'));
+        sections.preparation = splitList(extractBetween(bodyText, 'Priprema:', 'Savjet:'));
+        const tipsText = extractBetween(bodyText, 'Savjet:', null); // Get text from Savjet to end.
+        sections.tips = splitList(tipsText);
 
         return sections;
       }
@@ -528,14 +462,7 @@
       // Function to format list items
       function formatList(text) {
         if (!text) return '';
-
-        // The input text is expected to have items separated by newlines.
-        return text
-          .split('\n')
-          .map(line => line.trim())
-          .filter(line => line.length > 0)
-          .map(line => `<li>${line}</li>`)
-          .join('\n');
+        return text.split('\n').map(line => `<li>${line}</li>`).join('\n');
       }
 
       // Function to update the UI with parsed content
@@ -547,6 +474,11 @@
         }
 
         let html = `<div class="recipe-full-content">`;
+        // Use the parsed title.
+        if (sections.title) {
+            $('#recipeTitle').html(sections.title);
+        }
+
         if (sections.description && sections.description.trim()) {
           html += `
             <div class="recp-detail description-section">
@@ -582,12 +514,17 @@
           }
         }
         if (sections.tips && sections.tips.trim()) {
-          html += `
+          const formattedTips = formatList(sections.tips);
+          if (formattedTips) {
+            html += `
             <div class="recp-tips">
               <h3>✅ Savjet za korištenje</h3>
-              <p>${sections.tips}</p>
+              <ul class="list ingredients-list">
+                ${formattedTips}
+              </ul>
             </div>
           `;
+          }
         }
         html += `
           <div class="share-button">
