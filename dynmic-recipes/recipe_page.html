@@ -331,6 +331,11 @@
         div.innerHTML = html;
         let text = div.innerText;
 
+        // If it's a guide, use the guide parser
+        if (/Dan \d+:/.test(text)) {
+          return { isGuide: true, guideContent: parseGuideContent(text) };
+        }
+
         // Clean up the text and ensure proper section markers
         text = text
           .replace(/\r\n/g, '\n')
@@ -455,6 +460,12 @@
 
       // Function to update the UI with parsed content
       function updateRecipeUI(sections) {
+        // If it's a guide, use its custom HTML and stop
+        if (sections.isGuide) {
+          $('#recipeContent').html(sections.guideContent);
+          return;
+        }
+
         let html = `<div class="recipe-full-content">`;
         if (sections.description && sections.description.trim()) {
           html += `
@@ -600,6 +611,67 @@
         `);
       }
     });
+
+    // Function to parse a guide with daily sections
+    function parseGuideContent(text) {
+      let html = '<div class="recipe-full-content guide-content">';
+      
+      // The text before the first "Dan 1:" is the intro.
+      const introEndIndex = text.search(/Dan 1:/);
+      const introText = (introEndIndex !== -1 ? text.substring(0, introEndIndex) : text).trim();
+      const daysText = introEndIndex !== -1 ? text.substring(introEndIndex) : '';
+
+      // Separate title and description from the intro text.
+      // A lowercase letter followed by an uppercase is a good heuristic for where the description paragraph begins.
+      const descriptionMatch = introText.match(/([a-zšđčćž])([A-ZŠĐČĆŽ])/);
+      let title = introText;
+      let description = '';
+      if (descriptionMatch && descriptionMatch.index > 0) {
+          const splitPoint = descriptionMatch.index + 1;
+          title = introText.substring(0, splitPoint).trim();
+          description = introText.substring(splitPoint).trim();
+      }
+      
+      html += `<h3>📝 Opis</h3>`;
+      if (description) {
+          html += `<p>${description}</p>`;
+      }
+      
+      // Use match with a global flag to get all day sections, keeping the "Dan X:" marker.
+      // The lookahead `(?=(Dan \d:)|$)` ensures we capture the full text for each day.
+      const dayMatches = daysText.match(/Dan \d:.*?(?=(Dan \d:)|$)/g);
+      
+      if (dayMatches) {
+          dayMatches.forEach(dayMatch => {
+              // Find where the list items start (with a '-' or '•').
+              const listStartIndex = dayMatch.search(/\s*-\s*|\s*•\s*/);
+              let dayHeading = dayMatch;
+              let listItemsText = '';
+              
+              if (listStartIndex !== -1) {
+                  dayHeading = dayMatch.substring(0, listStartIndex).trim();
+                  listItemsText = dayMatch.substring(listStartIndex).trim();
+              }
+
+              html += `<h4>${dayHeading}</h4>`;
+              
+              // If there are list items, split them and create a list.
+              if (listItemsText) {
+                  const listItems = listItemsText.split(/\s*-\s*|\s*•\s*/).filter(item => item.trim());
+                  if (listItems.length > 0) {
+                      html += '<ul class="list ingredients-list">';
+                      listItems.forEach(item => {
+                          html += `<li>${item.trim()}</li>`;
+                      });
+                      html += '</ul>';
+                  }
+              }
+          });
+      }
+
+      html += '</div>';
+      return html;
+    }
   </script>
   <style>
     .loading-indicator {
