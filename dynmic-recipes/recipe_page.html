@@ -324,27 +324,112 @@
         }
       }
 
+      // Function to parse a guide with daily or numbered sections, assuming input text has proper newlines.
+      function parseGuideContent(text) {
+        let html = '<div class="recipe-full-content guide-content">';
+        const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+        
+        // First line is the title.
+        const title = lines.shift() || '';
+        html += `<h3>Opis</h3>`;
+
+        let description = '';
+        let sections = [];
+        let currentSection = null;
+
+        for (const line of lines) {
+            // A line is a section heading if it starts with "Dan X:" or a number followed by a period.
+            if (/^(Dan \d+:|\d+\.)/.test(line)) {
+                if (currentSection) sections.push(currentSection);
+                
+                // A section heading might contain the first list item on the same line.
+                // We split the line at the first list item marker (a space followed by - or •).
+                const itemMarkerIndex = line.search(/\s[-•]/);
+
+                let heading;
+                let itemsText = '';
+
+                if (itemMarkerIndex > 0) {
+                    heading = line.substring(0, itemMarkerIndex).trim();
+                    itemsText = line.substring(itemMarkerIndex).trim();
+                } else {
+                    heading = line;
+                }
+
+                currentSection = { heading: heading, list: [] };
+                
+                if (itemsText) {
+                    // Split the rest of the line into list items.
+                    const items = itemsText.split(/\s*[-•]\s*/).filter(item => item.trim());
+                    items.forEach(item => {
+                        if (item) currentSection.list.push(item);
+                    });
+                }
+
+            } else if (line.startsWith('-') || line.startsWith('•')) {
+                if (currentSection) {
+                    // This line contains only list items.
+                    const items = line.split(/\s*[-•]\s*/).filter(item => item.trim());
+                    items.forEach(item => {
+                        if (item) currentSection.list.push(item);
+                    });
+                }
+            } else {
+                // If we haven't started any sections yet, it's part of the main description.
+                if (!currentSection) {
+                    description += (description ? ' ' : '') + line;
+                }
+            }
+        }
+        if (currentSection) sections.push(currentSection);
+
+        if (description) {
+            html += `<p>${description}</p>`;
+        }
+
+        sections.forEach(section => {
+            html += `<h6>${section.heading}</h6>`;
+            if (section.list.length > 0) {
+                html += '<ul class="list ingredients-list">';
+                section.list.forEach(item => {
+                    html += `<li>${item}</li>`;
+                });
+                html += '</ul>';
+            }
+        });
+
+        html += '</div>';
+        return html;
+      }
+
       // Function to parse recipe content from HTML
       function parseRecipeContent(html) {
-        // Convert HTML to text while preserving line breaks
         const div = document.createElement('div');
         div.innerHTML = html;
-        let text = div.innerText;
+        
+        // Rebuild text from child nodes to preserve paragraph breaks as newlines.
+        // This is critical for reliable parsing of all document types.
+        let text = '';
+        for (const node of div.childNodes) {
+            if (node.textContent && node.textContent.trim()) {
+                text += node.textContent.trim() + '\n';
+            }
+        }
+        text = text.trim();
 
-        // If it's a guide, use the guide parser
-        if (/Dan \d+:/.test(text)) {
+        // If it's a guide, use the guide parser. Detects "Day X:" or "1." style guides.
+        if (/(Dan \d+:)|(^\d+\.)/m.test(text)) {
           return { isGuide: true, guideContent: parseGuideContent(text) };
         }
 
-        // Clean up the text and ensure proper section markers
+        // Clean up the text and ensure proper section markers for standard recipes
         text = text
           .replace(/\r\n/g, '\n')
-          .replace(/\n{3,}/g, '\n\n')  // Replace multiple newlines with double newlines
+          .replace(/\n{3,}/g, '\n\n')
           .trim();
-
-        // First, split the text into sections
+        
         const sections = {};
-
+        
         // Helper function to extract content between markers
         function extractBetween(text, startMarker, endMarker) {
           const startIndex = text.indexOf(startMarker);
@@ -494,7 +579,7 @@
             html += `
               <div class="recp-directions">
                 <h3>🧑‍🍳 Priprema</h3>
-                <ul class="list list-number preparation-list">
+                <ul class="list preparation-list">
                   ${formattedPreparation}
                 </ul>
               </div>
@@ -611,67 +696,6 @@
         `);
       }
     });
-
-    // Function to parse a guide with daily sections
-    function parseGuideContent(text) {
-      let html = '<div class="recipe-full-content guide-content">';
-      
-      // The text before the first "Dan 1:" is the intro.
-      const introEndIndex = text.search(/Dan 1:/);
-      const introText = (introEndIndex !== -1 ? text.substring(0, introEndIndex) : text).trim();
-      const daysText = introEndIndex !== -1 ? text.substring(introEndIndex) : '';
-
-      // Separate title and description from the intro text.
-      // A lowercase letter followed by an uppercase is a good heuristic for where the description paragraph begins.
-      const descriptionMatch = introText.match(/([a-zšđčćž])([A-ZŠĐČĆŽ])/);
-      let title = introText;
-      let description = '';
-      if (descriptionMatch && descriptionMatch.index > 0) {
-          const splitPoint = descriptionMatch.index + 1;
-          title = introText.substring(0, splitPoint).trim();
-          description = introText.substring(splitPoint).trim();
-      }
-      
-      html += `<h3>📝 Opis</h3>`;
-      if (description) {
-          html += `<p>${description}</p>`;
-      }
-      
-      // Use match with a global flag to get all day sections, keeping the "Dan X:" marker.
-      // The lookahead `(?=(Dan \d:)|$)` ensures we capture the full text for each day.
-      const dayMatches = daysText.match(/Dan \d:.*?(?=(Dan \d:)|$)/g);
-      
-      if (dayMatches) {
-          dayMatches.forEach(dayMatch => {
-              // Find where the list items start (with a '-' or '•').
-              const listStartIndex = dayMatch.search(/\s*-\s*|\s*•\s*/);
-              let dayHeading = dayMatch;
-              let listItemsText = '';
-              
-              if (listStartIndex !== -1) {
-                  dayHeading = dayMatch.substring(0, listStartIndex).trim();
-                  listItemsText = dayMatch.substring(listStartIndex).trim();
-              }
-
-              html += `<h4>${dayHeading}</h4>`;
-              
-              // If there are list items, split them and create a list.
-              if (listItemsText) {
-                  const listItems = listItemsText.split(/\s*-\s*|\s*•\s*/).filter(item => item.trim());
-                  if (listItems.length > 0) {
-                      html += '<ul class="list ingredients-list">';
-                      listItems.forEach(item => {
-                          html += `<li>${item.trim()}</li>`;
-                      });
-                      html += '</ul>';
-                  }
-              }
-          });
-      }
-
-      html += '</div>';
-      return html;
-    }
   </script>
   <style>
     .loading-indicator {
