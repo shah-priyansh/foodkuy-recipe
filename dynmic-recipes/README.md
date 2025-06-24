@@ -1,4 +1,4 @@
-# Foodkuy - Recipe Website
+# Bakine tajne - Recipe Website
 
 A beautiful, responsive recipe website featuring traditional Croatian and natural health recipes.
 

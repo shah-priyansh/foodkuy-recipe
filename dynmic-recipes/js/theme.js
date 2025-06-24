@@ -1,6 +1,6 @@
 /*================================================
 
-* Template Name: Foodkuy - Mobile HTML Template
+* Template Name: Bakine tajne
 * Version: 1.0
 * Author: HidraTheme 
 * Developed By: HidraTheme  
