@@ -50,7 +50,7 @@
         </li>
         <li>
           <a href="favorite.html"><i class="fas fa-user"></i>
-            Favorites</a>
+            Favoriti</a>
         </li>
         <li>
           <a href="news_list.html?category=detoks"><i class="fas fa-clone"></i>Detoks </a>
@@ -72,7 +72,7 @@
           <a href="news_list.html?category=zdravi-vodici"><i class="fas fa-cog"></i>Zdravi Vodiči</a>
         </li>
         <li>
-          <a href="news_list.html?category=croatian"><i class="fas fa-cog"></i>Croatian</a>
+          <a href="news_list.html?category=croatian"><i class="fas fa-cog"></i>Hrvatski</a>
         </li>
         <li>
           <a href="single_page.html"><i class="fas fa-exclamation-circle"></i> About</a>
@@ -333,7 +333,7 @@
         const lines = text.split('\n').map(line => line.trim()).filter(line => line);
         
         const title = lines.shift() || '';
-        html += `<h3>${title}</h3>`;
+        html += ``;
 
         let description = '';
         let sections = [];
@@ -367,14 +367,27 @@
             const contentText = section.content.join(' ');
             
             if (mealTypes.some(type => contentText.includes(type))) {
-                const mealRegex = new RegExp(`(?=(${mealTypes.join('|')}))`, 'g');
-                const meals = contentText.split(mealRegex).filter(m => m.trim());
-                meals.forEach(meal => {
-                    const firstColonIndex = meal.indexOf(':');
-                    if (firstColonIndex > -1) {
-                        const mealType = meal.substring(0, firstColonIndex + 1);
-                        const mealDesc = meal.substring(firstColonIndex + 1);
-                        html += `<p><strong>${mealType}</strong>${mealDesc.trim()}</p>`;
+                // Improved meal parsing to avoid duplicates
+                const processedMeals = new Set(); // Track processed meals to avoid duplicates
+                
+                mealTypes.forEach(mealType => {
+                    if (contentText.includes(mealType)) {
+                        // Find all occurrences of this meal type
+                        const regex = new RegExp(`${mealType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\n]*`, 'g');
+                        const matches = contentText.match(regex);
+                        
+                        if (matches) {
+                            matches.forEach(match => {
+                                const mealKey = match.trim();
+                                if (!processedMeals.has(mealKey)) {
+                                    processedMeals.add(mealKey);
+                                    const mealDesc = match.substring(mealType.length).trim();
+                                    if (mealDesc) {
+                                        html += `<p><strong>${mealType}</strong>${mealDesc}</p>`;
+                                    }
+                                }
+                            });
+                        }
                     }
                 });
             } else if (contentText.includes('-') || contentText.includes('•')) {
@@ -425,11 +438,31 @@
         let titleFound = false;
         
         headerLines.forEach(part => {
-            if (!titleFound && (/Recept:/.test(part) || part.includes(':'))) {
-                title = part.replace(/.*?Recept:\s*/, '').replace(/.*?Kategorija:\s*/, '').trim();
+            // Check if this line contains a recipe title pattern
+            const hasRecipePattern = /Recept:\s*[A-ZŠĐČĆŽ]/.test(part);
+            
+            if (!titleFound && hasRecipePattern) {
+                title = part
+                    .replace(/.*?Recept:\s*/, '')
+                    .replace(/.*?Kategorija:\s*/, '')
+                    .replace(/^[🥬🧪🧑‍🍳✅📝]\s*/, '') // Remove leading emojis from title
+                    .trim();
                 titleFound = true;
             } else {
-                descLines.push(part);
+                // Clean up description lines by removing common prefixes and patterns
+                let cleanLine = part
+                    .replace(/^Opis\s*Recept:\s*/i, '')
+                    .replace(/^Opis:\s*/i, '')
+                    .replace(/^Kategorija:\s*/i, '')
+                    .replace(/^[🥬🧪🧑‍🍳✅📝]\s*Recept:\s*/i, '') // Remove emoji + Recept: patterns
+                    .replace(/^[🥬🧪🧑‍🍳✅📝]\s*/, '') // Remove leading emojis
+                    .replace(/^Recept:\s*/i, '') // Remove Recept: anywhere in description
+                    .replace(/\s*Recept:\s*[A-ZŠĐČĆŽ][^.]*/, '') // Remove "Recept: [Title]" patterns anywhere in text
+                    .trim();
+                
+                if (cleanLine) {
+                    descLines.push(cleanLine);
+                }
             }
         });
         
@@ -439,6 +472,15 @@
 
         sections.title = title;
         sections.description = descLines.join(' ');
+        
+        // Final cleanup of description to remove any remaining "Recept:" patterns
+        if (sections.description) {
+            sections.description = sections.description
+                .replace(/\s*Recept:\s*[A-ZŠĐČĆŽ][^.]*/, '') // Remove "Recept: [Title]" patterns
+                .replace(/^[🥬🧪🧑‍🍳✅📝]\s*/, '') // Remove leading emojis
+                .replace(/^\s*Recept:\s*/, '') // Remove leading "Recept:"
+                .trim();
+        }
         
         // Process each subsequent part (ingredients, preparation, tips)
         parts.forEach(part => {
@@ -520,8 +562,8 @@
         }
 
         let html = `<div class="recipe-full-content">`;
-        // Use the parsed title.
-        if (sections.title) {
+        // Use the parsed title only if URL title is not provided
+        if (sections.title && !title) {
             $('#recipeTitle').html(sections.title);
         }
 

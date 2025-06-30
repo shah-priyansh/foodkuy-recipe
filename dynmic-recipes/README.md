@@ -1,13 +1,13 @@
 # Bakine tajne - Recipe Website
 
-A beautiful, responsive recipe website featuring traditional Croatian and natural health recipes.
+A beautiful, responsive recipe website featuring traditional Hrvatski and natural health recipes.
 
 ## Features
 
-- 🍽️ **Recipe Categories**: Detoks, Imunitet, Koža&Kosa, Srce i krvotok, Stres&san, Croatian
+- 🍽️ **Recipe Categories**: Detoks, Imunitet, Koža&Kosa, Srce i krvotok, Stres&san, Hrvatski
 - 📱 **Responsive Design**: Works perfectly on desktop, tablet, and mobile devices
 - 🔍 **Search Functionality**: Find recipes easily with the search feature
-- ❤️ **Favorites**: Save your favorite recipes
+- ❤️ **Favoriti**: Save your favorite recipes
 - 📖 **Detailed Recipe Pages**: Complete recipe instructions and ingredients
 - 🎨 **Modern UI**: Beautiful, user-friendly interface
 
@@ -16,7 +16,7 @@ A beautiful, responsive recipe website featuring traditional Croatian and natura
 - **Homepage** (`homepage.html`) - Main landing page with featured recipes
 - **Recipe List** (`news_list.html`) - Browse recipes by category
 - **Recipe Detail** (`recipe_page.html`) - Individual recipe pages
-- **Favorites** (`favorite.html`) - Saved favorite recipes
+- **Favoriti** (`favorite.html`) - Saved favorite recipes
 - **About** (`single_page.html`) - About page
 
 ## Technology Stack
@@ -83,7 +83,7 @@ dynmic-recipes/
 ├── homepage.html           # Main homepage
 ├── news_list.html          # Recipe category pages
 ├── recipe_page.html        # Individual recipe pages
-├── favorite.html           # Favorites page
+├── favorite.html           # Favoriti page
 ├── single_page.html        # About page
 ├── 404.html               # Error page
 ├── css/                   # Stylesheets
@@ -96,7 +96,7 @@ dynmic-recipes/
 │   ├── Koža&Kosa/
 │   ├── Srce i krvotok/
 │   ├── Stres&san/
-│   ├── Croatian/
+│   ├── Hrvatski/
 │   └── Zdravi_Vodici/
 └── favicon.ico            # Website icon
 ```
